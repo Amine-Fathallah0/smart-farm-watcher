@@ -1,0 +1,232 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+    <head>
+    <meta charset="UTF-8" />
+    <title>GeoApp - Interactive Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Bootstrap CSS -->
+     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-4Q6Gf2aSP4eDXB8Miphtr37CMZZQ5oXLH2yaXMJ2w8e2ZtHTl7GptT4jmndRuHDT" crossorigin="anonymous">
+     <!-- Leaflet CSS -->
+     <link
+     rel="stylesheet"
+     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""
+     />
+     <!-- Leaflet Draw CSS (with icons) -->
+     <link
+     rel="stylesheet"
+     href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+     />
+     
+     <style>
+         /* Existing styles remain unchanged */
+         body {
+             font-family: Arial, sans-serif;
+             margin: 0;
+             padding: 0;
+            }
+            
+            header {
+                background-color: #0944b1a6;
+                color: white;
+                padding: 1rem;
+                text-align: center;
+            }
+            
+            .container {
+                padding: 1rem 2rem;
+            }
+            
+            #map {
+                height: 600px;
+                margin-top: 1rem;
+            }
+            
+            footer {
+                position: fixed;
+                bottom: 0;
+                background-color: #0944b149;
+                width: 100%;
+                text-align: center;
+                padding: 1rem;
+                margin-top: 2rem;
+            }
+            
+            .login-container {
+                max-width: 600px;
+                margin: 100px auto;
+                background: rgb(51 181 229 / 23%);
+                ;
+                padding: 2rem;
+                border-radius: 12px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                text-align: left;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .login-container h2 {
+                text-align: center;
+                margin-bottom: 1rem;
+                color: #0944b1;
+            }
+            
+            form table {
+                width: 100%;
+            }
+            
+            form td {
+                padding: 0.5rem 0;
+            }
+            
+            input[type="text"], input[type="password"] {
+                width: 100%;
+                padding: 0.5rem;
+                border-radius: 8px;
+                border: 1px solid #ccc;
+                box-sizing: border-box;
+            }
+            
+            .login-container .btn {
+                width: 100%;             /* Makes it fill the container */
+                padding: 0.7rem;         /* Sets vertical padding */
+                margin-top: 1rem;        /* Adds space above the button */
+                font-weight: bold;       /* Makes text bold */
+                cursor: pointer;         /* Changes cursor on hover */
+                transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease; /* Smooth transitions */
+                border-radius: 8px;      /* Applies rounded corners */
+            }
+
+            
+            .login-container .btn-outline-primary {
+                
+                background-color:rgba(53, 64, 83, 0); 
+                color: #0944b1;              
+                border: 1px solid #0944b1;              
+                
+            }
+
+            /* Hover effect for the btn-outline-primary button */
+            .login-container .btn-outline-primary:hover {
+                background-color: #0636a1; 
+                color: white;              
+                border: none;              
+                
+            }
+            
+            .error {
+                color: #e74c3c;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 1rem;
+            }
+            .register-container {
+                max-width: 1200px;
+                margin: 100px auto; /* Centered with top margin */
+                background: rgb(51 181 229 / 23%); /* Transparent light blue background */
+                padding: 2rem;
+                border-radius: 12px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* Soft shadow */
+                text-align: left; /* Align text to the left within the container */
+                display: flex; /* Use flexbox for vertical alignment of content */
+                flex-direction: column;
+                align-items: left; /* Center items horizontally within the flex container */
+                justify-content: center; /* Center items vertically within the flex container (if container has height) */
+            }
+
+            .register-container h2 {
+                text-align: center; /* Center the heading */
+                margin-bottom: 1.5rem; /* Slightly more space below the heading */
+                color: #0944b1; /* Blue color for heading */
+            }
+
+            /* Styles for form groups */
+            .form-group {
+                width: 100%; /* Ensure form groups take full width of container */
+                margin-bottom: 1rem; /* Space between form groups */
+            }
+
+            .form-group label {
+                display: block; /* Labels on their own line */
+                margin-bottom: 0.5rem; /* Space between label and input */
+                font-weight: bold; /* Bold labels */
+                color: #333; /* Darker color for labels */
+            }
+
+            /* Style for text, email, and password inputs to match login form */
+            .register-container input[type="text"],
+            .register-container input[type="email"], /* Added email input */
+            .register-container input[type="password"] {
+                width: 100%;
+                padding: 0.8rem; /* Slightly more padding than default */
+                border-radius: 8px; /* Rounded corners */
+                border: 1px solid #ccc; /* Light grey border */
+                box-sizing: border-box; /* Include padding and border in the element's total width and height */
+                font-size: 1rem; /* Consistent font size */
+            }
+
+            /* Style for the register button to match login submit button */
+            .register-container .btn-primary { 
+                width: 100%;
+                padding: 0.7rem;
+                margin-top: 1rem; 
+                background-color:rgba(9, 68, 177, 0); /* Blue background */
+                color: #0944b1; /* White text */
+                border: none; /* No border */
+                border-radius: 8px; /* Rounded corners */
+                border: 1px solid #0944b1;              /* Remove the outline border */
+                font-weight: bold; /* Bold text */
+                cursor: pointer; /* Pointer on hover */
+                transition: background-color 0.3s ease; /* Smooth transition for hover effect */
+            }
+
+            .register-container .btn-primary:hover {
+                background-color: #0636a1; /* Darker blue on hover */
+                color:rgba(255, 255, 255, 0.9); /* White text */
+            }
+
+            /* Style for error messages (if you use Django's messages framework or a custom error div) */
+            .register-container .alert-danger { 
+                color: #e74c3c;
+                background-color: #f8d7da;
+                border-color: #f5c6cb;
+                padding: 0.75rem 1.25rem;
+                margin-bottom: 1rem;
+                border: 1px solid transparent;
+                border-radius: 0.25rem;
+                width: 100%;
+                text-align: center;
+            }
+            .register-container .error {
+                color: #e74c3c;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 1rem;
+                width: 100%;
+            }
+</style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js" integrity="sha384-j1CDi7MgGQ12Z7Qab0qlWQ/Qqz24Gc6BM0thvEMVjHnfYGF0rmFCozFSxQBxwHKO" crossorigin="anonymous"></script>
+    <header>
+        <h1>Welcome to GeoApp</h1>
+        <p>Draw and explore with Leaflet maps!</p>
+    </header>
+    <div class="content container">
+        <div class="row">
+            <div class="col-md-8">
+                {% block content %}
+                {% endblock %}
+            </div>
+        </div>
+        </div>
+        <footer>
+            &copy; Amine Fathallah GeoApp — Made with Leaflet
+        </footer>
+    </body>
+</html>
