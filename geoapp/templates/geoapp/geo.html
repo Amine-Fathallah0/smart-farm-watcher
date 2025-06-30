@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>GeoApp - Interactive Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    {# --- CSS LINKS (ALL IN HEAD) --- #}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-4Q6Gf2aSP4eDXB8Miphtr37CMZZQ5oXLH2yaXMJ2w8e2ZtHTl7GptT4jmndRuHDT" crossorigin="anonymous">
+    
+    {# Leaflet CSS #}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    {# Leaflet Draw CSS #}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    
+    {# Your Custom CSS Styles #}
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f6fa;
+        }
+        
+        header {
+            background-color: #0944b1a6;
+            color: white;
+            padding: 0.5rem;
+            text-align: center;
+            position: relative;
+        }
+        
+        .user-info {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .user-info form {
+            display: inline;
+            margin-left: 10px;
+        }
+        
+        .container {
+            padding: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .map-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            padding: 1rem 1rem 2rem;
+        }
+        
+        h2 {
+            margin-top: 0;
+        }
+        
+        #map {
+            height: 500px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        
+        #saveBtn:hover {
+            background-color: #073a94;
+        }
+        
+        footer {
+            background-color: #0944b149;
+            text-align: center;
+            padding: 1rem;
+            margin-top: 3rem;
+        }
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .left {
+            font-weight: bold;
+            color: white;
+        }
+        
+        .logout-btn {
+            background-color: #ffffff;
+            color: #0944b1;
+            border: none;
+            padding: 6px 12px;
+            font-weight: bold;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background-color: #e5e5e5;
+        }
+        
+        .map-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 1rem;
+        }
+
+        .map-controls label {
+            white-space: nowrap;
+            margin-bottom: 0;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .map-controls input[type="text"] {
+            flex-grow: 1;
+            padding: 0.8rem 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+            margin-bottom: 0;
+        }
+
+        .map-controls input[type="text"]::placeholder {
+            color: #aaa;
+        }
+
+        #saveBtn {
+            margin-top: 0;
+            padding: 0.5rem 1.2rem;
+            background-color: #0944b1;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            display: none; /* Hide by default, shown by JS */
+        }
+
+        .locations-list {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            padding: 1rem;
+            max-height: 570px; 
+            overflow-y: auto; 
+            margin-top: 0; 
+        }
+        
+        .map-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            padding: 1rem 1rem 2rem;
+        }
+
+        .locations-list h3 {
+            margin-top: 0;
+            color: #0944b1;
+            font-size: 1.55rem;
+            border-bottom: 1px solid #eee; 
+            padding-bottom: 0.5rem;
+            margin-bottom: 0.8rem;
+        }
+        .locations-list ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .locations-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 0.95rem;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .locations-list li:last-child {
+            border-bottom: none;
+        }
+        .locations-list .location-name {
+            font-weight: bold;
+            color: #333;
+        }
+        .locations-list .location-type {
+            font-style: italic;
+            color: #777;
+            font-size: 0.85em;
+        }
+        .locations-list li input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        /* Styles for camera input form popup */
+        #camera-input-form {
+            position: absolute; /* Allows positioning relative to the map or body */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); /* Centers the element */
+            z-index: 10000; /* Ensure it's above other map elements */
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: none; /* Hide by default */
+            min-width: 280px;
+        }
+
+        #camera-input-form h4 {
+            margin-top: 0;
+            color: #0944b1;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+        #camera-input-form label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        #camera-input-form input[type="text"] {
+            width: calc(100% - 20px);
+            padding: 8px 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        #camera-input-form button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        #camera-input-form #saveCameraBtn {
+            background-color: #28a745;
+            color: white;
+        }
+
+        #camera-input-form #cancelCameraBtn {
+            background-color: #dc3545;
+            color: white;
+        }
+        .leaflet-draw-icon-camera {
+            /* Assuming your CAMERA_ICON_STATIC_URL points to a file named 'camera-icon.png' */
+            background-image: url('../img/camera-icon.png'); /* Adjust path as necessary */
+            background-size: 22px 22px; /* Adjust size to fit the button */
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        /* You might want to override default Leaflet.draw styles for consistency */
+        .leaflet-draw-toolbar a {
+            /* Example: adjust padding or size for all buttons if needed */
+            width: 30px; /* Standard Leaflet.draw button width */
+            height: 30px; /* Standard Leaflet.draw button height */
+        }
+
+        /* Ensure the default icon classes are not interfering if you have issues */
+        .leaflet-draw-icon-marker {
+            /* If you still see the default marker icon for your camera button,
+            you might need to explicitly override it here if it's applied
+            before your custom class. But typically, `className` replaces it. */
+        }
+        /* NEW CSS for the Video Modal */
+        #video-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85); /* Semi-transparent background */
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.6);
+            z-index: 10000; /* Ensure it's above other elements */
+            display: none; /* Hidden by default, JavaScript will show it */
+            color: white; /* For text within the modal */
+            max-width: 90vw; /* Max width relative to viewport */
+            max-height: 90vh; /* Max height relative to viewport */
+            box-sizing: border-box; /* Include padding in dimensions */
+        }
+
+        #video-modal h3 {
+            margin-top: 0;
+            color: white;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        #video-modal .video-js {
+            margin-bottom: 15px;
+            width: 100%; /* Make video player fill modal width */
+            height: auto; /* Maintain aspect ratio */
+            max-width: 640px; /* Example max width */
+            max-height: 360px; /* Example max height, adjust as needed */
+        }
+
+        #video-modal #close-video-modal {
+            display: block;
+            width: 100%;
+            padding: 10px 15px;
+            background-color: #dc3545; /* Red color for close button */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s ease;
+        }
+
+        #video-modal #close-video-modal:hover {
+            background-color: #c82333;
+        }
+    </style>
+    {# Video.js CSS is already here, no change needed #}
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+
+    {# Video.js JS and HLS.js JS are already here, no change needed #}
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <script src="https://unpkg.com/@videojs/http-streaming/dist/videojs-http-streaming.min.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="left">
+                <span>Welcome, {{ request.user.username }}</span>
+            </div>
+            <div class="right">
+                <form action="{% url 'logout' %}" method="post">
+                    {% csrf_token %}
+                    <button type="submit" class="logout-btn">Logout</button>
+                </form>
+            </div>
+        </div>
+        <h1>Welcome to GeoApp</h1>
+        <p>Draw and explore with Leaflet maps!</p>
+    </header>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="map-card">
+                    <h2>About the Map</h2>
+                    <p>This interactive map lets you draw and annotate geographic shapes.</p>
+
+                    <div id="map"></div>
+
+                    <div class="map-controls">
+                        <button id="saveBtn">Save</button>
+                        <input type="text" id="locationName" placeholder="Add location name">
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="locations-list">
+                    <h3>Your Saved Locations</h3>
+                    <button id="visualizeSelectedBtn" class="btn btn-outline-success mb-2">
+                        Visualize Selected Location
+                    </button>
+                    <button id="clearMapBtn" style="display: none;" class="btn btn-secondary mb-2">
+                        Clear Map
+                    </button>
+                    
+                    <ul id="userLocationsList">
+                        {% if user_locations %}
+                            {% for location in user_locations %}
+                                <li>
+                                <div class="form-check form-switch">
+                                <input type="checkbox" class="form-check-input" role="switch" id="switchCheckDefault-{{ location.id }}" value="{{ location.id }}" data-geometry-type="{%if location.point %}Point{% elif location.polygon %}Polygon{% endif %}">
+                                    <span class="location-name">{{ location.name }}</span>
+                                    <span class="location-type">
+                                        {% if location.point %}Point{% elif location.polygon %}Polygon{% else %}Unknown{% endif %}
+                                    </span>
+                                </div>
+                                </li>
+                            {% endfor %}
+                        {% else %}
+                            <li>No locations saved yet.</li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# --- HIDDEN CAMERA INPUT FORM (Should be outside map, hidden) --- #}
+    {# This div is cloned and used as popup content, so it can be anywhere in the body, but hidden. #}
+    <div id="camera-input-form" style="display: none;">
+        <h4>Add New Camera</h4>
+        <label for="cameraName">Name:</label><br>
+        <input type="text" id="cameraName" name="camera_name" required><br><br>
+        
+        <label for="rtspUrl">RTSP URL:</label><br>
+        <input type="text" id="rtspUrl" name="rtsp_url" placeholder="rtsp://..." required><br><br>
+        
+        <button id="saveCameraBtn">Save </button>
+        <button id="cancelCameraBtn">Cancel</button> {# ADDED a cancel button for the form #}
+    </div>
+
+    {# --- NEW: HIDDEN VIDEO PLAYER MODAL --- #}
+    <div id="video-modal">
+        <h3>Live Stream</h3>
+        {# The video-js class applies Video.js styling; vjs-default-skin is a common theme #}
+        {# controls: shows default player controls (play/pause, volume etc.) #}
+        {# preload="auto": tells browser to preload video data when page loads #}
+        {# data-setup='{}': tells Video.js to initialize on this element automatically #}
+        <video id="my-video" class="video-js vjs-default-skin" controls preload="auto" data-setup='{}'></video>
+        <button id="close-video-modal">Close</button>
+    </div>
+
+    {# --- JAVASCRIPT LINKS (ALL AT END OF BODY, IN SPECIFIC ORDER) --- #}
+
+    {# Bootstrap JS (Popper.js first, then Bootstrap's main JS) #}
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.min.js" integrity="sha384-RuyvpeZCxMJCqVUGFI0Do1mQrods/hhxYlcVfGPOfQtPJh0JCw12tUAZ/Mv10S7D" crossorigin="anonymous"></script>
+
+    {# Leaflet JS (MUST be loaded before Leaflet Draw and your geo.js) #}
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    {# Leaflet Draw JS (MUST be loaded after Leaflet) #}
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+    {# HLS.js (MUST be loaded before geo.js if geo.js uses it) #}
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+    {# Define CAMERA_ICON_STATIC_URL globally ONCE #}
+    {# Ensure the path 'geoapp/img/camera-icon.png' is correct (case-sensitive on some systems!) #}
+    <script>
+        const CAMERA_ICON_STATIC_URL = "{% static 'geoapp/Img/camera-icon.png' %}";
+    </script>
+
+    {# Your custom geo.js script (MUST be loaded LAST, after all dependencies) #}
+    {# Ensure the path 'geoapp/geo.js' is correct #}
+    <script src="{% static 'geoapp/geo.js' %}"></script> 
+    
+    <footer>
+        &copy; Amine Fathallah GeoApp — Made with Leaflet
+    </footer>
+</body>
+</html>

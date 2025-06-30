@@ -1,0 +1,13 @@
+Collecting numpy
+  Downloading numpy-2.2.6-cp312-cp312-win_amd64.whl.metadata (60 kB)
+Collecting wheel
+  Using cached wheel-0.45.1-py3-none-any.whl.metadata (2.3 kB)
+Collecting setuptools
+  Using cached setuptools-80.9.0-py3-none-any.whl.metadata (6.6 kB)
+Downloading numpy-2.2.6-cp312-cp312-win_amd64.whl (12.6 MB)
+   ---------------------------------------- 12.6/12.6 MB 889.2 kB/s eta 0:00:00
+Using cached wheel-0.45.1-py3-none-any.whl (72 kB)
+Using cached setuptools-80.9.0-py3-none-any.whl (1.2 MB)
+Installing collected packages: wheel, setuptools, numpy
+
+Successfully installed numpy-2.2.6 setuptools-80.9.0 wheel-0.45.1
