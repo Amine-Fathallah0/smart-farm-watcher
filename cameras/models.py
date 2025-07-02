@@ -77,7 +77,7 @@ class Camera(models.Model):
             '-c:v', 'libx264', 
             '-c:a', 'aac', 
             '-b:a', '128k',
-            '-vf', 'scale=640:-1', 
+            '-vf', 'scale=640:426', 
             '-hls_time', '4', 
             '-hls_list_size', '10', 
             '-hls_flags', 'delete_segments', 
