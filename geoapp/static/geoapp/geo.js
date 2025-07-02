@@ -538,7 +538,8 @@ function saveNewCamera(name, rtsp_url, lng, lat) {
     .then(data => {
         if (data.status === 'success') {
             alert('Camera added successfully!');
-            loadCameras();
+            setTimeout(() => {
+            loadCameras();}, 12000);
         } else {
             alert('Failed to add camera: ' + data.message);
         }

@@ -45,7 +45,7 @@ async def add_camera(request):
 
             # Start the stream immediately after saving
             if camera.is_active:
-                if not await sync_to_async(camera.start_stream)():
+                if not await camera.start_stream():
                     # If stream fails to start, you might want to log this or return an error
                     # But for simplicity, we'll let it proceed
                     logger.error(f"Failed to kick off FFmpeg for camera {camera.id}.")
