@@ -38,8 +38,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.gis', # <--- Make sure this is present and spelled correctly
+    'django.contrib.gis',
 
+    'channels',
     'geoapp',
     'cameras',
 ]
@@ -74,10 +75,14 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'mysite.wsgi.application'
-ASGI_APPLICATION = 'SFG.asgi.application'
+# WSGI_APPLICATION = 'mysite.wsgi.application'
+ASGI_APPLICATION = 'mysite.asgi.application'
 
-
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 # Adjust the path below to the actual location of your gdal.dll
 GDAL_LIBRARY_PATH = r"myvenv\Lib\site-packages\osgeo\gdal.dll"
 GEOS_LIBRARY_PATH = r"myvenv\Lib\site-packages\osgeo\geos_c.dll"

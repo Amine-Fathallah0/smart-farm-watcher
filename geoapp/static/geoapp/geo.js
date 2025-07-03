@@ -3,14 +3,20 @@
 // Make sure all the old commented-out Leaflet code at the very top is GONE.
 // It caused "Identifier 'map' has already been declared" errors if left there.
 let map = L.map('map').setView([36.8, 10.2], 13); // Map centered on Teboulbou, Gabès Governorate, Tunisia
+let cameraSocket = null; // Global variable for the WebSocket connection
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
 }).addTo(map);
 
-let drawnItems = new L.FeatureGroup();
+let drawnItems = new L.FeatureGroup(); // For drawing tools (polylines, polygons, etc.)
 map.addLayer(drawnItems);
 
+let cameraLayer = L.featureGroup().addTo(map); // For displaying camera markers
+let visualizedLocationsLayer = new L.FeatureGroup().addTo(map); // For visualizing selected non-camera locations
+
+// Global variable to hold the temporary marker for input form (used by openCameraInputForm)
+let tempCameraMarker = null; 
 // --- START CUSTOM CAMERA DRAW HANDLER ---
 // Ensure CAMERA_ICON_STATIC_URL is correctly defined in your HTML before this script
 const cameraIcon = L.icon({
@@ -28,9 +34,8 @@ L.Draw.CameraMarker = L.Draw.Marker.extend({
             start: 'Click map to place a camera'
         }
     },
-    // *** ADD THIS LINE ***
     statics: {
-        TYPE: 'cameraMarker'
+        TYPE: 'cameraMarker' // Define a static TYPE for easy identification
     },
     initialize: function (map, options) {
         L.Draw.Marker.prototype.initialize.call(this, map, options);
@@ -47,15 +52,16 @@ let drawControl = new L.Control.Draw({
         polygon: true,
         rectangle: true,
         circle: true,
-        marker: false, // If you want the default marker tool
+        marker: false, // Disable default Leaflet marker tool
         circlemarker: false
     },
     edit: {
-        featureGroup: drawnItems
+        featureGroup: drawnItems // drawnItems is where non-camera shapes will be added
     }
 });
 
 // --- OVERRIDE L.DrawToolbar.include to provide ALL handlers ---
+// This ensures your custom camera marker tool appears in the drawing toolbar.
 L.DrawToolbar.include({
     getModeHandlers: function (map) {
         const drawOptions = drawControl.options.draw;
@@ -82,13 +88,13 @@ L.DrawToolbar.include({
                 title: 'Draw a Circle'
             },
             {
-                enabled: drawOptions.marker,
+                enabled: drawOptions.marker, // This is false by default, but kept for completeness
                 handler: new L.Draw.Marker(map, drawOptions.marker),
                 title: 'Draw a Marker'
             },
             // Your Custom Camera Marker Tool
             {
-                enabled: true,
+                enabled: true, // Enable your custom camera marker
                 handler: new L.Draw.CameraMarker(map, { icon: cameraIcon }), // Ensure this uses your cameraIcon
                 title: 'Place Camera Marker',
                 className: 'leaflet-draw-icon-camera' // This CSS class will be applied to the button
@@ -100,14 +106,12 @@ L.DrawToolbar.include({
 
 // Now add the control to the map
 map.addControl(drawControl);
+let currentGeometry = null; // For non-camera drawn shapes
 
-
-let currentGeometry = null;
-
+// Event listener for when a drawing is created on the map
 map.on('draw:created', function (e) {
     let layer = e.layer;
     let type = e.layerType;
-    // Add this line to log the handler itself for inspection
     console.log('Draw event created! Type:', type, 'Layer:', layer, 'Handler:', e.handler);
 
     if (type === 'cameraMarker') {
@@ -115,32 +119,33 @@ map.on('draw:created', function (e) {
         const latlng = layer.getLatLng();
 
         // Remove the temporary marker that Leaflet.draw automatically added
-        drawnItems.removeLayer(layer); // This layer is the one created by L.Draw.CameraMarker
+        // This marker is replaced by the one created in openCameraInputForm
+        drawnItems.removeLayer(layer); 
 
-        // Open your custom input form
+        // Open your custom input form for camera details
         openCameraInputForm(latlng);
 
-        // *** FIX STARTS HERE ***
-        // Instead of drawControl.disable(), disable the specific handler
-        if (e.handler && e.handler.disable) {
-            e.handler.disable(); // Disable the active drawing handler (e.g., L.Draw.CameraMarker instance)
+        // Disable the active drawing handler after creation
+        if (e.handler && typeof e.handler.disable === 'function') { 
+            e.handler.disable(); 
             console.log('Active drawing tool disabled.');
         } else {
             console.warn('Could not disable active drawing tool, handler or disable method not found.');
         }
-        // *** FIX ENDS HERE ***
 
     } else {
-        // Standard drawn items (polyline, polygon, rectangle, circle, default marker)
-        drawnItems.clearLayers();
-        drawnItems.addLayer(layer);
-        currentGeometry = layer.toGeoJSON().geometry;
-        document.getElementById("saveBtn").style.display = "inline";
+        // Handle standard drawn items (polyline, polygon, rectangle, circle)
+        // Clear previous drawn items to only show the latest one
+        drawnItems.clearLayers(); 
+        drawnItems.addLayer(layer); // Add the new drawn shape to the map
+        currentGeometry = layer.toGeoJSON().geometry; // Store its GeoJSON geometry
+        document.getElementById("saveBtn").style.display = "inline"; // Show save button for general geometry
     }
 });
 
+// Event listener for saving general drawn geometry (not cameras)
 document.getElementById("saveBtn").onclick = function () {
-    if (!currentGeometry) return;
+    if (!currentGeometry) return; // If no geometry is drawn, do nothing
 
     var customNameInput = document.getElementById('locationName');
     var customName = customNameInput ? customNameInput.value.trim() : '';
@@ -150,7 +155,7 @@ document.getElementById("saveBtn").onclick = function () {
         return;
     }
 
-    fetch('/save/', {
+    fetch('/save/', { // Assuming this is your endpoint for saving general geometries
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -169,22 +174,20 @@ document.getElementById("saveBtn").onclick = function () {
     })
     .then(data => {
         alert("Saved!");
-        currentGeometry = null;
-        drawnItems.clearLayers();
-        document.getElementById("saveBtn").style.display = "none";
+        currentGeometry = null; // Clear current geometry
+        drawnItems.clearLayers(); // Clear drawn shapes from map
+        document.getElementById("saveBtn").style.display = "none"; // Hide save button
         if (customNameInput) {
-            customNameInput.value = '';
+            customNameInput.value = ''; // Clear input field
         }
-        location.reload();
+        location.reload(); // Reload page after saving general geometry
     })
     .catch(error => {
         console.error('Error:', error);
         alert('Error saving geometry: ' + error.message);
     });
 };
-
-let visualizedLocationsLayer = L.featureGroup().addTo(map);
-
+// Helper function to get CSRF token from cookies
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -200,6 +203,7 @@ function getCookie(name) {
     return cookieValue;
 }
 
+// Event listener for visualizing selected locations (from the list on the left)
 document.getElementById('visualizeSelectedBtn').addEventListener('click', function() {
     const selectedIds = [];
     const checkboxes = document.querySelectorAll('.form-check-input:checked');
@@ -213,9 +217,9 @@ document.getElementById('visualizeSelectedBtn').addEventListener('click', functi
         selectedIds.push(checkbox.value);
     });
 
-    visualizedLocationsLayer.clearLayers();
+    visualizedLocationsLayer.clearLayers(); // Clear previously visualized layers
 
-    fetch('/get_locations_geojson/', {
+    fetch('/get_locations_geojson/', { // Assuming this endpoint returns GeoJSON for selected IDs
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -232,6 +236,7 @@ document.getElementById('visualizeSelectedBtn').addEventListener('click', functi
     .then(geojson => {
         L.geoJSON(geojson, {
             pointToLayer: function (feature, latlng) {
+                // Use cameraIcon for camera features, default circle marker for others
                 if (feature.properties && feature.properties.is_camera) {
                     return L.marker(latlng, { icon: cameraIcon });
                 }
@@ -246,16 +251,21 @@ document.getElementById('visualizeSelectedBtn').addEventListener('click', functi
             },
             onEachFeature: function (feature, layer) {
                 if (feature.properties && feature.properties.name) {
+                    // If it's a camera with a stream, create the video popup
                     if (feature.properties.is_camera && feature.properties.stream_url) {
                         const streamUrl = feature.properties.stream_url;
                         const cameraName = feature.properties.name;
                         const cameraId = feature.properties.id;
                         const cameraDescription = feature.properties.description || '';
 
+                        // Use the same popup HTML structure as createCameraPopupContent
                         let videoHtml = `
-                            <h4>${cameraName}</h4>
-                            ${streamUrl ? `<video id="camera-video-${cameraId}" controls width="250" height="150" autoplay muted></video>` : `<p>No live stream available for this camera.</p>`}
-                            ${cameraDescription ? `<p>${cameraDescription}</p>` : ''}
+                            <b>${cameraName}</b><br>
+                            Description: ${cameraDescription}<br>
+                            RTSP URL: ${feature.properties.rtsp_url}<br>
+                            <div id="video-container-${cameraId}" style="width: 100%; height: 200px; background-color: black;">
+                                ${streamUrl ? `<video id="camera-video-${cameraId}" controls width="250" height="150" autoplay muted></video>` : `<p>No live stream available for this camera.</p>`}
+                            </div>
                         `;
 
                         layer.bindPopup(videoHtml, {
@@ -263,11 +273,12 @@ document.getElementById('visualizeSelectedBtn').addEventListener('click', functi
                             className: 'camera-popup'
                         });
 
+                        // Hls.js initialization on popup open for visualized cameras
                         layer.on('popupopen', function() {
                             if (streamUrl) {
                                 const videoElement = document.getElementById(`camera-video-${cameraId}`);
                                 if (videoElement) {
-                                    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                                    if (typeof Hls !== 'undefined' && Hls.isSupported() && !videoElement._hlsInstance) {
                                         const hls = new Hls();
                                         hls.loadSource(streamUrl);
                                         hls.attachMedia(videoElement);
@@ -292,12 +303,10 @@ document.getElementById('visualizeSelectedBtn').addEventListener('click', functi
                                                 }
                                             }
                                         });
-                                        videoElement._hlsInstance = hls;
-                                    }
-                                    else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                                        videoElement._hlsInstance = hls; // Store Hls.js instance
+                                    } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
                                         videoElement.src = streamUrl;
-                                    }
-                                    else {
+                                    } else {
                                         if (videoElement.parentNode) {
                                             videoElement.parentNode.innerHTML = '<p>Your browser does not support HLS playback.</p>';
                                         }
@@ -306,6 +315,7 @@ document.getElementById('visualizeSelectedBtn').addEventListener('click', functi
                             }
                         });
 
+                        // Hls.js disposal on popup close for visualized cameras
                         layer.on('popupclose', function() {
                             const videoElement = document.getElementById(`camera-video-${cameraId}`);
                             if (videoElement) {
@@ -320,12 +330,13 @@ document.getElementById('visualizeSelectedBtn').addEventListener('click', functi
                         });
 
                     } else {
+                        // For non-camera features or cameras without stream_url
                         layer.bindPopup(`<b>${feature.properties.name}</b><br>Type: ${feature.properties.type}`);
                     }
                 }
             }
-        }).addTo(visualizedLocationsLayer);
-
+        }).addTo(visualizedLocationsLayer); // Add to visualizedLocationsLayer
+        
         if (visualizedLocationsLayer.getLayers().length > 0) {
             map.fitBounds(visualizedLocationsLayer.getBounds());
         }
@@ -338,23 +349,189 @@ document.getElementById('visualizeSelectedBtn').addEventListener('click', functi
     });
 });
 
+// Event listener for clearing visualized locations
 document.getElementById('clearMapBtn').addEventListener('click', function() {
     visualizedLocationsLayer.clearLayers();
     document.getElementById('clearMapBtn').style.display = 'none';
     document.querySelectorAll('.form-check-input:checked').forEach(checkbox => {
         checkbox.checked = false;
     });
-    map.setView([36.8, 10.2], 8);
+    map.setView([36.8, 10.2], 8); // Reset map view
 });
+// Function to open the camera input form popup
+function openCameraInputForm(latlng) {
+    // Remove any existing temporary marker if one was already placed
+    if (tempCameraMarker) {
+        map.removeLayer(tempCameraMarker);
+    }
 
-let cameraLayer = L.featureGroup().addTo(map);
+    // Create a new temporary marker at the clicked location
+    tempCameraMarker = L.marker(latlng, { icon: cameraIcon, draggable: true }).addTo(map);
 
+    // Get the HTML content for the camera input form (assuming it's in a hidden div)
+    const formHtml = document.getElementById('camera-input-form').innerHTML;
 
+    // Bind the form HTML to the temporary marker's popup and open it
+    tempCameraMarker.bindPopup(formHtml, {
+        maxWidth: 300,
+        className: 'camera-add-popup'
+    }).openPopup();
+
+    // Store the initial latlng on the marker for later use (e.g., if dragged)
+    tempCameraMarker.latlng = latlng;
+
+    // Use requestAnimationFrame to ensure the popup is rendered before querying its elements
+    requestAnimationFrame(() => {
+        const popupContent = tempCameraMarker.getPopup().getElement();
+        const saveBtn = popupContent.querySelector('#saveCameraBtn');
+        const cameraNameInput = popupContent.querySelector('#cameraName');
+        const rtspUrlInput = popupContent.querySelector('#rtspUrl');
+        const cameraDescriptionInput = popupContent.querySelector('#cameraDescription'); // Added description input
+
+        // Populate form fields if editing an existing camera (tempCameraMarker.cameraData would be set)
+        if (tempCameraMarker.cameraData) {
+            cameraNameInput.value = tempCameraMarker.cameraData.name || '';
+            rtspUrlInput.value = tempCameraMarker.cameraData.rtsp_url || '';
+            if (cameraDescriptionInput) {
+                cameraDescriptionInput.value = tempCameraMarker.cameraData.description || '';
+            }
+        }
+
+        // Event listener for the Save button within the popup
+        saveBtn.onclick = function() {
+            const name = cameraNameInput.value.trim();
+            const rtsp_url = rtspUrlInput.value.trim();
+            const description = cameraDescriptionInput ? cameraDescriptionInput.value.trim() : '';
+            const markerLatlng = tempCameraMarker.getLatLng(); // Get final latlng (in case marker was dragged)
+
+            if (name && rtsp_url) {
+                // Store data on temp marker (useful if editing or for immediate display logic)
+                tempCameraMarker.cameraData = { name: name, rtsp_url: rtsp_url, description: description };
+                // Call saveNewCamera with all necessary data
+                saveNewCamera(name, rtsp_url, description, markerLatlng.lng, markerLatlng.lat);
+                // The popup will be closed by the WebSocket message handling after successful save
+            } else {
+                alert('Camera Name and RTSP URL are required.');
+            }
+            // No need to closePopup here, it's handled by WebSocket message
+        };
+
+        // Event listener for when the temporary marker is dragged
+        tempCameraMarker.on('dragend', function(event) {
+            tempCameraMarker.latlng = event.target.getLatLng();
+        });
+    });
+
+    // Event listener for when the temporary marker's popup is closed
+    tempCameraMarker.on('popupclose', function() {
+        if (tempCameraMarker) {
+            map.removeLayer(tempCameraMarker); // Remove the temporary marker from the map
+            tempCameraMarker = null; // Clear the reference
+        }
+    });
+}
+
+// Function to save a new camera to the backend
+function saveNewCamera(name, rtsp_url, description, lng, lat) {
+    const locationGeoJSON = {
+        type: "Point",
+        coordinates: [lng, lat]
+    };
+
+    fetch('/cameras/add/', { // Endpoint to add a new camera
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            name: name,
+            rtsp_url: rtsp_url,
+            description: description, // Include description
+            location: locationGeoJSON
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(error => {
+                throw new Error(error.message || `HTTP error! status: ${response.status}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'success') {
+            // alert('Camera added successfully!'); // Alert is now handled by WebSocket message
+            // The map update is now handled by the WebSocket message, not loadCameras() directly
+            // The setTimeout is moved to the WebSocket onmessage handler
+        } else {
+            alert('Failed to add camera: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error adding camera:', error);
+        alert('Error adding camera: ' + error.message);
+    });
+}
+// Function to set up the WebSocket connection
+function setupWebSocket() {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    // The WebSocket URL must match the combined path from mysite/routing.py and cameras/routing.py
+    // mysite/routing.py has r'^ws/' and cameras/routing.py has r'cameras/$'
+    const wsUrl = wsProtocol + window.location.host + '/ws/cameras/'; 
+
+    cameraSocket = new WebSocket(wsUrl);
+
+    cameraSocket.onopen = function(e) {
+        console.log('WebSocket connection established!', e);
+    };
+
+    cameraSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        console.log('WebSocket message received:', data);
+
+        if (data.type === 'camera_added') {
+            const newCamera = data.camera;
+            // Add the new camera to the map dynamically after a delay
+            // This delay gives FFmpeg time to generate initial HLS segments.
+            setTimeout(() => {
+                addCameraToMap(newCamera);
+                // Optionally, open the popup for the new camera automatically
+                // This would require finding the marker by its camera.id and calling .openPopup()
+                // For now, it will appear on the map, and user can click it.
+            }, 12000); // 12 seconds delay (adjust as needed based on stream startup time)
+
+            // Close the camera input form popup if it's open
+            if (tempCameraMarker) {
+                tempCameraMarker.closePopup();
+            }
+            alert(`New camera "${newCamera.name}" added and stream starting.`);
+        }
+        // You would add more `else if` blocks here for other message types:
+        // e.g., 'camera_updated', 'camera_deleted', 'camera_stopped'
+        // to dynamically update or remove markers from the map.
+    };
+
+    cameraSocket.onclose = function(e) {
+        console.error('WebSocket closed unexpectedly:', e);
+        // Attempt to reconnect after a delay to maintain real-time updates
+        setTimeout(setupWebSocket, 3000); 
+    };
+
+    cameraSocket.onerror = function(e) {
+        console.error('WebSocket error:', e);
+    };
+}
+
+// Modified loadCameras function:
+// This function is responsible for fetching ALL existing cameras from the backend
+// and adding them to the map. It's called on initial page load.
 function loadCameras() {
-    fetch('/cameras/api/geojson/', {
+    fetch('/cameras/api/geojson/', { // Fetch from the GeoJSON API endpoint
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
+            // 'X-CSRFToken': getCookie('csrftoken') // Only needed for POST requests
         }
     })
     .then(response => {
@@ -365,34 +542,28 @@ function loadCameras() {
         return response.json();
     })
     .then(geojson => {
-        cameraLayer.clearLayers();
+        cameraLayer.clearLayers(); // Clear existing camera markers
 
         L.geoJSON(geojson, {
             pointToLayer: function (feature, latlng) {
+                // Use the global cameraIcon for markers
                 return L.marker(latlng, { icon: cameraIcon });
             },
             onEachFeature: function (feature, layer) {
-                const streamUrl = feature.properties.stream_url;
-                const cameraName = feature.properties.name;
-                const cameraId = feature.properties.id;
-                const cameraDescription = feature.properties.description;
-
-                let videoHtml = `
-                    <h4>${cameraName}</h4>
-                    ${streamUrl ? `<video id="camera-video-${cameraId}" controls width="250" height="150" autoplay muted></video>` : `<p>No live stream available for this camera.</p>`}
-                    ${cameraDescription ? `<p>${cameraDescription}</p>` : ''}
-                `;
-
-                layer.bindPopup(videoHtml, {
+                // Use createCameraPopupContent helper for consistency and Hls.js management
+                layer.bindPopup(createCameraPopupContent(feature.properties), {
                     maxWidth: 300,
                     className: 'camera-popup'
                 });
 
+                // Hls.js initialization on popup open
                 layer.on('popupopen', function() {
+                    const streamUrl = feature.properties.stream_url;
+                    const cameraId = feature.properties.id; // Use feature.properties.id
                     if (streamUrl) {
                         const videoElement = document.getElementById(`camera-video-${cameraId}`);
                         if (videoElement) {
-                            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                            if (typeof Hls !== 'undefined' && Hls.isSupported() && !videoElement._hlsInstance) {
                                 const hls = new Hls();
                                 hls.loadSource(streamUrl);
                                 hls.attachMedia(videoElement);
@@ -417,12 +588,10 @@ function loadCameras() {
                                         }
                                     }
                                 });
-                                videoElement._hlsInstance = hls;
-                            }
-                            else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                                videoElement._hlsInstance = hls; // Store Hls.js instance
+                            } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
                                 videoElement.src = streamUrl;
-                            }
-                            else {
+                            } else {
                                 if (videoElement.parentNode) {
                                     videoElement.parentNode.innerHTML = '<p>Your browser does not support HLS playback.</p>';
                                 }
@@ -431,7 +600,9 @@ function loadCameras() {
                     }
                 });
 
+                // Hls.js disposal on popup close
                 layer.on('popupclose', function() {
+                    const cameraId = feature.properties.id; // Use feature.properties.id
                     const videoElement = document.getElementById(`camera-video-${cameraId}`);
                     if (videoElement) {
                         videoElement.pause();
@@ -452,213 +623,127 @@ function loadCameras() {
     });
 }
 
+// NEW: Function to add a single camera marker to the map
+// This function is called by loadCameras (for initial load) and by setupWebSocket (for new cameras).
+function addCameraToMap(camera) {
+    // Check if a marker for this camera already exists to avoid duplicates
+    let existingMarker = null;
+    cameraLayer.eachLayer(function(layer) { // Check in cameraLayer
+        if (layer.cameraData && layer.cameraData.id === camera.id) {
+            existingMarker = layer;
+        }
+    });
 
-let tempCameraMarker = null;
-
-function openCameraInputForm(latlng) {
-    if (tempCameraMarker) {
-        map.removeLayer(tempCameraMarker);
+    if (existingMarker) {
+        // Update existing marker's data and position.
+        existingMarker.cameraData = camera;
+        existingMarker.setLatLng(L.latLng(camera.location.coordinates[1], camera.location.coordinates[0]));
+        console.log(`Updating existing marker for camera ${camera.id}`);
+        // If the popup is currently open, update its content to reflect new data.
+        if (existingMarker.isPopupOpen()) {
+            existingMarker.setPopupContent(createCameraPopupContent(camera));
+            // Dispose of the old Hls.js instance if it exists and re-initialize.
+            const videoElement = document.getElementById(`camera-video-${camera.id}`);
+            if (videoElement && videoElement._hlsInstance) { // Use _hlsInstance for Hls.js
+                videoElement._hlsInstance.destroy();
+                delete videoElement._hlsInstance; // Remove the reference
+            }
+            // Manually fire popupopen to re-initialize the Hls.js player with new content
+            existingMarker.fire('popupopen');
+        }
+        return; // Exit as the marker has been updated
     }
 
-    tempCameraMarker = L.marker(latlng, { icon: cameraIcon, draggable: true }).addTo(map);
+    // Create a new Leaflet marker if it doesn't exist.
+    const latlng = L.latLng(camera.location.coordinates[1], camera.location.coordinates[0]);
+    const marker = L.marker(latlng, { icon: cameraIcon }).addTo(cameraLayer); // Add marker to cameraLayer
+    marker.cameraData = camera; // Store the full camera data on the marker
 
-    const formHtml = document.getElementById('camera-input-form').innerHTML;
+    // Bind the popup content to the marker.
+    marker.bindPopup(createCameraPopupContent(camera), {maxWidth: 300, className: 'camera-popup'});
 
-    tempCameraMarker.bindPopup(formHtml, {
-        maxWidth: 300,
-        className: 'camera-add-popup'
-    }).openPopup();
-
-    tempCameraMarker.latlng = latlng;
-
-    requestAnimationFrame(() => {
-        const popupContent = tempCameraMarker.getPopup().getElement();
-        const saveBtn = popupContent.querySelector('#saveCameraBtn');
-        const cameraNameInput = popupContent.querySelector('#cameraName');
-        const rtspUrlInput = popupContent.querySelector('#rtspUrl');
-
-        if (tempCameraMarker.cameraData) {
-            cameraNameInput.value = tempCameraMarker.cameraData.name || '';
-            rtspUrlInput.value = tempCameraMarker.cameraData.rtsp_url || '';
-        }
-
-        saveBtn.onclick = function() {
-            const name = cameraNameInput.value.trim();
-            const rtsp_url = rtspUrlInput.value.trim();
-            const markerLatlng = tempCameraMarker.getLatLng();
-
-            if (name && rtsp_url) {
-                tempCameraMarker.cameraData = { name: name, rtsp_url: rtsp_url };
-                saveNewCamera(name, rtsp_url, markerLatlng.lng, markerLatlng.lat);
-            } else {
-                alert('Camera details not complete. Not saving.');
+    // Event listener for when the marker's popup is opened.
+    marker.on('popupopen', function() {
+        const streamUrl = camera.stream_url;
+        if (streamUrl) {
+            const videoElement = document.getElementById(`camera-video-${camera.id}`); 
+            if (videoElement) { 
+                if (typeof Hls !== 'undefined' && Hls.isSupported() && !videoElement._hlsInstance) {
+                    const hls = new Hls();
+                    hls.loadSource(streamUrl);
+                    hls.attachMedia(videoElement);
+                    
+                    hls.on(Hls.Events.ERROR, function(event, data) {
+                        console.error('HLS error:', data);
+                        if (data.fatal) {
+                            switch(data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    console.error("Fatal network error, trying to recover...");
+                                    hls.startLoad();
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    console.error("Fatal media error, trying to recover...");
+                                    hls.recoverMediaError();
+                                    break;
+                                default:
+                                    hls.destroy();
+                                    if (videoElement.parentNode) {
+                                        videoElement.parentNode.innerHTML = '<p>Stream failed to load due to a fatal error.</p>';
+                                    }
+                                    break;
+                            }
+                        }
+                    });
+                    videoElement._hlsInstance = hls; 
+                    console.log('Hls.js player initialized for camera', camera.id);
+                } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                    videoElement.src = streamUrl;
+                } else {
+                    if (videoElement.parentNode) {
+                        videoElement.parentNode.innerHTML = '<p>Your browser does not support HLS playback.</p>';
+                    }
+                }
             }
-            tempCameraMarker.closePopup();
-        };
-
-        tempCameraMarker.on('dragend', function(event) {
-            tempCameraMarker.latlng = event.target.getLatLng();
-        });
-    });
-
-    tempCameraMarker.on('popupclose', function() {
-        if (tempCameraMarker) {
-            map.removeLayer(tempCameraMarker);
-            tempCameraMarker = null;
         }
     });
+
+    // Event listener for when the marker's popup is closed.
+    marker.on('popupclose', function() {
+        const videoElement = document.getElementById(`camera-video-${camera.id}`); 
+        if (videoElement) {
+            videoElement.pause(); 
+            videoElement.removeAttribute('src'); 
+            videoElement.load(); 
+            if (typeof Hls !== 'undefined' && Hls.isSupported() && videoElement._hlsInstance) {
+                videoElement._hlsInstance.destroy();
+                delete videoElement._hlsInstance; 
+                console.log('Hls.js player disposed for camera', camera.id);
+            }
+        }
+    });
+
+    cameraLayer.addLayer(marker); // Add the marker to the cameraLayer group
+    console.log(`Added new marker for camera ${camera.id}`);
 }
 
-function saveNewCamera(name, rtsp_url, lng, lat) {
-    const locationGeoJSON = {
-        type: "Point",
-        coordinates: [lng, lat]
-    };
+// NEW: Helper function to create popup content (reusable for initial load and updates)
+function createCameraPopupContent(camera) {
+    const streamUrl = camera.stream_url;
+    const cameraDescription = camera.description;
+    const cameraId = camera.id;
 
-    fetch('/cameras/add/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        body: JSON.stringify({
-            name: name,
-            rtsp_url: rtsp_url,
-            location: locationGeoJSON
-        })
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(error => {
-                throw new Error(error.message || `HTTP error! status: ${response.status}`);
-            });
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.status === 'success') {
-            alert('Camera added successfully!');
-            setTimeout(() => {
-            loadCameras();}, 8000);
-        } else {
-            alert('Failed to add camera: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error adding camera:', error);
-        alert('Error adding camera: ' + error.message);
-    });
+    return `
+        <b>${camera.name}</b><br>
+        Description: ${cameraDescription || ''}<br>
+        RTSP URL: ${camera.rtsp_url}<br>
+        <div id="video-container-${cameraId}" style="width: 100%; height: 200px; background-color: black;">
+            ${streamUrl ? `<video id="camera-video-${cameraId}" controls width="250" height="150" autoplay muted></video>` : `<p>No live stream available for this camera.</p>`}
+        </div>
+    `;
 }
 
+// Modify DOMContentLoaded to setup WebSocket and load initial cameras
 document.addEventListener('DOMContentLoaded', function() {
-    loadCameras();
+    setupWebSocket(); // Start WebSocket connection
+    loadCameras();    // Load existing cameras on initial page load
 });
-
-let player; // Global variable for the Video.js player
-
-// Function to open video modal and play stream
-function openVideoModal(streamUrl) {
-    const videoModal = document.getElementById('video-modal');
-    const videoElement = document.getElementById('my-video');
-    
-    videoModal.style.display = 'block';
-
-    if (player) {
-        player.dispose(); // Dispose of any existing player instance
-    }
-
-    player = videojs(videoElement, {
-        controls: true,
-        autoplay: true,
-        preload: 'auto',
-        techCanOverrideSources: true,
-        html5: {
-            hls: {
-                withCredentials: false
-            }
-        },
-        sources: [{
-            src: streamUrl,
-            type: 'application/x-mpegURL' // Mime type for HLS
-        }]
-    }, function() {
-        console.log('Video.js player is ready');
-    });
-}
-
-// Function to close video modal
-document.getElementById('close-video-modal').addEventListener('click', function() {
-    const videoModal = document.getElementById('video-modal');
-    videoModal.style.display = 'none';
-    if (player) {
-        player.pause();
-        player.reset();
-    }
-});
-
-
-// Modify your onEachFeature function to open the video modal
-function onEachFeature(feature, layer) {
-    if (feature.properties && feature.properties.name) {
-        let popupContent = `<b>${feature.properties.name}</b><br>`;
-        if (feature.properties.description) {
-            popupContent += `Description: ${feature.properties.description}<br>`;
-        }
-        if (feature.properties.rtsp_url) {
-            popupContent += `RTSP URL: ${feature.properties.rtsp_url}<br>`;
-        }
-        
-        // Add a button to view the stream IF a stream_url exists
-        if (feature.properties.stream_url) {
-            popupContent += `<button class="view-stream-btn" data-stream-url="${feature.properties.stream_url}">View Stream</button>`;
-        } else {
-             popupContent += `<em>Stream not active/available</em><br>`;
-        }
-
-        // Add Edit/Delete buttons (if applicable)
-        popupContent += `<button class="edit-camera-btn" data-id="${feature.properties.id}" data-name="${feature.properties.name}" data-rtsp_url="${feature.properties.rtsp_url}" data-description="${feature.properties.description}" data-lat="${feature.geometry.coordinates[1]}" data-lng="${feature.geometry.coordinates[0]}">Edit</button>`;
-        popupContent += `<button class="delete-camera-btn" data-id="${feature.properties.id}">Delete</button>`;
-
-        layer.bindPopup(popupContent);
-
-        // Attach event listener for the "View Stream" button inside the popup
-        layer.on('popupopen', function() {
-            const popupElement = layer.getPopup().getElement();
-            const viewStreamBtn = popupElement.querySelector('.view-stream-btn');
-            if (viewStreamBtn) {
-                viewStreamBtn.onclick = function() {
-                    const streamUrl = this.dataset.streamUrl;
-                    if (streamUrl) {
-                        openVideoModal(streamUrl);
-                    } else {
-                        alert('Stream URL not available for this camera.');
-                    }
-                };
-            }
-
-            // (Your existing edit/delete button handlers here)
-            const editBtn = popupElement.querySelector('.edit-camera-btn');
-            if (editBtn) {
-                editBtn.onclick = function() {
-                    const id = this.dataset.id;
-                    const name = this.dataset.name;
-                    const rtsp_url = this.dataset.rtsp_url;
-                    const description = this.dataset.description;
-                    const lat = parseFloat(this.dataset.lat);
-                    const lng = parseFloat(this.dataset.lng);
-                    openEditCameraForm(id, name, rtsp_url, description, lat, lng);
-                };
-            }
-
-            const deleteBtn = popupElement.querySelector('.delete-camera-btn');
-            if (deleteBtn) {
-                deleteBtn.onclick = function() {
-                    if (confirm('Are you sure you want to delete this camera?')) {
-                        const cameraId = this.dataset.id;
-                        deleteCamera(cameraId);
-                    }
-                };
-            }
-        });
-    }
-}

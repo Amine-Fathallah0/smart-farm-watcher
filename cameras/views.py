@@ -3,6 +3,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt # For API endpoint
+from channels.layers import get_channel_layer 
+
 import json
 from django.contrib.gis.geos import Point
 from .models import Camera
@@ -26,10 +28,12 @@ async def add_camera(request):
             if not coordinates or len(coordinates) != 2:
                 return JsonResponse({'status': 'error', 'message': 'Invalid or missing location coordinates.'}, status=400)
             
-            lng, lat = coordinates[0], coordinates[1]
-
-            if not name or not rtsp_url:
-                return JsonResponse({'status': 'error', 'message': 'Missing required data (name or RTSP URL).'}, status=400)
+            try:
+                lng = float(coordinates[0])
+                lat = float(coordinates[1])
+            except (ValueError, TypeError) as e:
+                logger.error(f"Failed to convert coordinates to float: {coordinates}. Error: {e}", exc_info=True)
+                return JsonResponse({'status': 'error', 'message': 'Invalid numeric format for coordinates.'}, status=400)
 
             location_point = Point(lng, lat, srid=4326)
 
@@ -46,9 +50,37 @@ async def add_camera(request):
             # Start the stream immediately after saving
             if camera.is_active:
                 if not await camera.start_stream():
-                    # If stream fails to start, you might want to log this or return an error
-                    # But for simplicity, we'll let it proceed
                     logger.error(f"Failed to kick off FFmpeg for camera {camera.id}.")
+            
+            # --- CRITICAL ADDITION: Send WebSocket message to update clients ---
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                # Prepare camera data to send over WebSocket
+                # Ensure it's JSON serializable. Point object needs conversion.
+                camera_data = {
+                    'id': camera.id,
+                    'name': camera.name,
+                    'rtsp_url': camera.rtsp_url,
+                    'description': camera.description,
+                    # Convert Point object to a list for JSON serialization
+                    'location': {'type': 'Point', 'coordinates': [camera.location.x, camera.location.y]},
+                    'stream_url': camera.stream_url,
+                    'ffmpeg_process_id': camera.ffmpeg_process_id, # Include PID for potential client-side use
+                    'is_streaming': camera.is_streaming,
+                    # Add any other fields from the Camera model that the frontend needs
+                }
+                # Send the message to the 'cameras' group, which all consumers are listening to
+                await channel_layer.group_send(
+                    'cameras', # Group name must match consumer's group_add
+                    {
+                        'type': 'camera_update', # This maps to camera_update method in consumer
+                        'message_type': 'camera_added', # Custom type for client-side handling
+                        'camera_data': camera_data
+                    }
+                )
+                logger.info(f"Sent WebSocket message for new camera {camera.id}.")
+            else:
+                logger.warning("Channel layer not configured, cannot send WebSocket message.")
 
             return JsonResponse({'status': 'success', 'message': 'Camera added successfully!', 'camera_id': camera.id})
 
@@ -61,6 +93,7 @@ async def add_camera(request):
     else:
         form = CameraForm()
         return render(request, 'cameras/add_camera.html', {'form': form})
+
 
 @login_required
 async def edit_camera(request, pk):
